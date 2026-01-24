@@ -14,7 +14,7 @@ export default function HomeScreen() {
   const { hasShareIntent, shareIntent } = useShareIntent();
   const [imageUri, setImageUri] = useState<string | null>(null);
   
-  // CHANGED: State now holds the Object, not just a string
+  // State holds the full Analysis Object now
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   
   const [loading, setLoading] = useState<boolean>(false);
@@ -35,7 +35,7 @@ export default function HomeScreen() {
     }
   };
 
-  // Handle Share Intent (from other apps)
+  // Handle Share Intent (from other apps like Twitter/Instagram)
   useEffect(() => {
     const handleShare = async () => {
       if (hasShareIntent && shareIntent?.type === 'media' && shareIntent.files) {
@@ -50,7 +50,7 @@ export default function HomeScreen() {
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 0.5, // Lower quality = Faster upload
+      quality: 0.5, 
     });
 
     if (!result.canceled) {
@@ -66,11 +66,10 @@ export default function HomeScreen() {
     setAnalysis(null); // Clear previous result
 
     try {
-      // Expecting an Object now, not a string
       const result = await analyzeImage(uri);
       setAnalysis(result);
 
-      // Refresh history immediately
+      // Refresh history immediately so the new scan appears in the list
       loadHistory();
     } catch (err: any) {
       setError(err.message || "Failed to connect");
@@ -79,13 +78,25 @@ export default function HomeScreen() {
     }
   };
 
-  // Ping Test (Updated for JSON)
+  // --- NEW: Handle History Clicks ---
+  const handleHistorySelect = (item: AnalysisResult) => {
+    // 1. Load the old result into the main display card
+    setAnalysis(item);
+    
+    // 2. Clear the image preview because we don't have the old image file anymore
+    // (This acts as a visual cue that we are looking at a "Record")
+    setImageUri(null);
+    
+    // 3. Scroll to top (Optional, but nice UX if you added a ref to ScrollView)
+  };
+
+  // Ping Test
   const testConnection = async () => {
     setLoading(true);
     setError(null);
     try {
       console.log("Pinging server...");
-      // We send a tiny 1x1 pixel image just to wake up the AI
+      // Send a tiny 1x1 pixel image to wake up the AI
       const res = await analyzeImage("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
       setAnalysis(res);
     } catch (e: any) {
@@ -100,13 +111,14 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
       <ScrollView contentContainerStyle={{ paddingBottom: 50 }}>
+        
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Edge Guardian v2.0</Text>
           <Text style={styles.subtitle}>System Status: <Text style={styles.online}>ONLINE</Text></Text>
         </View>
 
-        {/* Image Preview */}
+        {/* Image Preview (Only shows if we just scanned something) */}
         {imageUri && (
           <Image source={{ uri: imageUri }} style={styles.imagePreview} />
         )}
@@ -119,7 +131,6 @@ export default function HomeScreen() {
         )}
 
         {/* Traffic Light Result Card */}
-        {/* We pass 'result' because the component expects an object */}
         <GuardianResponse loading={loading} result={analysis} />
 
         {/* Action Buttons */}
@@ -143,20 +154,25 @@ export default function HomeScreen() {
             )}
         </View>
 
-        {/* History Section - UPDATED for New Data Structure */}
+        {/* History Section - Clickable! */}
         {history.length > 0 && (
           <View style={styles.historySection}>
-            <Text style={styles.historyTitle}>RECENT SCANS</Text>
+            <Text style={styles.historyTitle}>RECENT SCANS (TAP TO VIEW)</Text>
             <FlatList
               data={history}
               scrollEnabled={false}
               keyExtractor={(item, index) => index.toString()}
               renderItem={({ item }) => (
-                <View style={[
-                    styles.historyItem, 
-                    // Dynamic Border Color based on Verdict
-                    { borderLeftColor: item.verdict === 'DANGER' ? '#ff3333' : item.verdict === 'CAUTION' ? '#ffa500' : '#39FF14' }
-                ]}>
+                <TouchableOpacity 
+                    // Make it clickable
+                    onPress={() => handleHistorySelect(item)}
+                    activeOpacity={0.7}
+                    style={[
+                        styles.historyItem, 
+                        // Dynamic Border Color
+                        { borderLeftColor: item.verdict === 'DANGER' ? '#ff3333' : item.verdict === 'CAUTION' ? '#ffa500' : '#39FF14' }
+                    ]}
+                >
                   <View style={styles.historyHeader}>
                       <Text style={[
                           styles.historyVerdict, 
@@ -164,13 +180,18 @@ export default function HomeScreen() {
                         ]}>
                         {item.verdict}
                       </Text>
-                      <Text style={styles.historyTime}>
-                        {item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : 'Just now'}
-                      </Text>
+                      
+                      {/* Timestamp + Arrow to show it's clickable */}
+                      <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <Text style={styles.historyTime}>
+                            {item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : 'Just now'}
+                        </Text>
+                        <Text style={{color: '#666', marginLeft: 10, fontSize: 16}}>→</Text>
+                      </View>
                   </View>
                   
                   <Text style={styles.historyTactic}>{item.tactic}</Text>
-                </View>
+                </TouchableOpacity>
               )}
             />
           </View>
@@ -195,7 +216,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#39FF14',
     fontSize: 28,
-    fontFamily: 'Courier', // Kept your Matrix font
+    fontFamily: 'Courier', 
     textShadowColor: 'rgba(57, 255, 20, 0.8)',
     textShadowRadius: 10,
     fontWeight: 'bold',
@@ -248,7 +269,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   buttonText: {
-    color: '#000', // Black text on green button looks cool
+    color: '#000', 
     textAlign: 'center',
     fontWeight: 'bold',
     letterSpacing: 2,
